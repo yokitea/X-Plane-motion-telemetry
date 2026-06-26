@@ -1,0 +1,33 @@
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Visual Studio / compiler junk
+*.exp
+.vs/
+*.pdb
+*.ilk
+
+# Python
+__pycache__/
+*.pyc
+
+# Note: win.xpl is NOT ignored so people can download the compiled plugin directly if needed.
