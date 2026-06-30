@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IOS Dashboard | LUP Simulator</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+    <header>
+        <h1>LUP <span>IOS DASHBOARD</span></h1>
+        <div class="status-indicator">
+            SERVER STATUS
+            <div id="connection-status" class="status-dot"></div>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="panel">
+                <h2>Biometrics & AI</h2>
+                <div class="data-grid">
+                    <div class="data-card">
+                        <div class="data-label">Active Role</div>
+                        <div id="bio-role" class="data-value" style="font-size: 1.2rem;">Scanning...</div>
+                    </div>
+                    <div class="data-card">
+                        <div class="data-label">Heart Rate</div>
+                        <div id="bio-hr" class="data-value">-- bpm</div>
+                    </div>
+                    <div class="data-card" style="grid-column: span 2;">
+                        <div class="data-label">Stress Envelope</div>
+                        <div id="bio-stress" class="data-value success">Normal</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel" style="margin-top: 1.5rem;">
+                <h2>Sabotage Injection</h2>
+                <div class="sabotage-grid">
+                    <button id="btn-comms" onclick="toggleSabotage('COMMS')">
+                        Cut Communications <span>⚡</span>
+                    </button>
+                    <button id="btn-cctv" onclick="toggleSabotage('CCTV')">
+                        Blackout CCTV <span>👁️</span>
+                    </button>
+                    <button id="btn-avionics" onclick="toggleSabotage('AVIONICS')">
+                        Avionics Failure <span>⚠️</span>
+                    </button>
+                    <button id="btn-windshear" onclick="toggleSabotage('WINDSHEAR')" style="position: relative; overflow: hidden;">
+                        Gradual Windshear <span>🌪️</span>
+                        <div id="windshear-meter" style="width: 0%; height: 4px; background: rgba(255, 255, 255, 0.8); position: absolute; bottom: 0; left: 0; transition: width 0.5s;"></div>
+                    </button>
+                </div>
+            </div>
+
+            <div class="panel" id="caps-panel" style="margin-top: 1.5rem; display: none; background: rgba(255, 51, 102, 0.15); border-color: var(--danger);">
+                <h2 style="color: var(--danger); text-shadow: 0 0 10px var(--danger-glow);">EMERGENCY OPTIONS</h2>
+                <button id="btn-caps" style="width: 100%; justify-content: center; background: var(--danger); color: white;" onclick="authorizeCaps()">
+                    AUTHORIZE CAPS DEPLOYMENT 🆘
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <div class="panel">
+                <h2>Live Telemetry</h2>
+                <div class="data-grid" style="grid-template-columns: repeat(4, 1fr);">
+                    <div class="data-card">
+                        <div class="data-label">RPM</div>
+                        <div id="tel-rpm" class="data-value">0.0</div>
+                    </div>
+                    <div class="data-card">
+                        <div class="data-label">SPEED (Kts)</div>
+                        <div id="tel-spd" class="data-value">0.0</div>
+                    </div>
+                    <div class="data-card">
+                        <div class="data-label">ALTITUDE (Ft)</div>
+                        <div id="tel-alt" class="data-value">0</div>
+                    </div>
+                    <div class="data-card">
+                        <div class="data-label">HEADING</div>
+                        <div id="tel-hdg" class="data-value">0.0</div>
+                    </div>
+                    <div class="data-card">
+                        <div class="data-label">PITCH</div>
+                        <div id="tel-pitch" class="data-value">0.00</div>
+                    </div>
+                    <div class="data-card">
+                        <div class="data-label">ROLL</div>
+                        <div id="tel-roll" class="data-value">0.00</div>
+                    </div>
+                    <div class="data-card">
+                        <div class="data-label">G-FORCE</div>
+                        <div id="tel-g" class="data-value">1.00</div>
+                    </div>
+                    <div class="data-card">
+                        <div class="data-label">STALL WARNING</div>
+                        <div id="tel-stall" class="data-value">OK</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel" style="flex-grow: 1;">
+                <h2>Scenario Log</h2>
+                <div id="scenario-log" style="font-family: 'JetBrains Mono'; font-size: 0.9rem; color: var(--text-muted); overflow-y: auto; height: 200px;">
+                    > System initialized...<br>
+                    > Waiting for scenario triggers...<br>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        const statusDot = document.getElementById('connection-status');
+        let activeSabotages = [];
+
+        socket.on('connect', () => {
+            statusDot.classList.add('connected');
+            logEvent('Connected to Central Event Bus.');
+        });
+
+        socket.on('disconnect', () => {
+            statusDot.classList.remove('connected');
+            logEvent('Disconnected from server.', true);
+        });
+
+        // Telemetry updates
+        socket.on('telemetry_update', (data) => {
+            if(data.RPM !== undefined) document.getElementById('tel-rpm').textContent = data.RPM.toFixed(1);
+            if(data.SPD !== undefined) document.getElementById('tel-spd').textContent = data.SPD.toFixed(1);
+            if(data.ALT !== undefined) document.getElementById('tel-alt').textContent = data.ALT.toFixed(0);
+            if(data.HDG !== undefined) document.getElementById('tel-hdg').textContent = data.HDG.toFixed(1);
+            if(data.PTCH !== undefined) document.getElementById('tel-pitch').textContent = data.PTCH.toFixed(2);
+            if(data.ROLL !== undefined) document.getElementById('tel-roll').textContent = data.ROLL.toFixed(2);
+            if(data.GN !== undefined) document.getElementById('tel-g').textContent = data.GN.toFixed(2);
+            
+            if(data.STALL !== undefined) {
+                const stallEl = document.getElementById('tel-stall');
+                if (data.STALL == 1) {
+                    stallEl.textContent = "STALL";
+                    stallEl.classList.add('danger');
+                } else {
+                    stallEl.textContent = "OK";
+                    stallEl.classList.remove('danger');
+                }
+            }
+        });
+
+        // Biometrics updates
+        socket.on('biometrics_update', (data) => {
+            document.getElementById('bio-hr').textContent = data.heartRate + " bpm";
+            document.getElementById('bio-role').textContent = data.activeRole;
+            
+            const stressEl = document.getElementById('bio-stress');
+            stressEl.textContent = data.stressLevel;
+            if (data.stressLevel === 'CRITICAL' || data.stressLevel === 'HIGH') {
+                stressEl.classList.add('danger');
+            } else {
+                stressEl.classList.remove('danger');
+            }
+        });
+
+        // Sabotage updates (syncs state across clients)
+        socket.on('sabotage_update', (sabotages) => {
+            activeSabotages = sabotages;
+            
+            // Reset all buttons
+            document.getElementById('btn-comms').classList.remove('active');
+            document.getElementById('btn-cctv').classList.remove('active');
+            document.getElementById('btn-avionics').classList.remove('active');
+            document.getElementById('btn-windshear').classList.remove('active');
+
+            if (sabotages.includes('COMMS')) document.getElementById('btn-comms').classList.add('active');
+            if (sabotages.includes('CCTV')) document.getElementById('btn-cctv').classList.add('active');
+            if (sabotages.includes('AVIONICS')) document.getElementById('btn-avionics').classList.add('active');
+            if (sabotages.includes('WINDSHEAR')) document.getElementById('btn-windshear').classList.add('active');
+            
+            if (!sabotages.includes('WINDSHEAR')) {
+                document.getElementById('windshear-meter').style.width = '0%';
+                document.getElementById('caps-panel').style.display = 'none';
+            }
+        });
+
+        // Windshear intensity
+        socket.on('windshear_intensity', (intensity) => {
+            const meter = document.getElementById('windshear-meter');
+            const pct = (intensity / 10) * 100; // max intensity 10
+            meter.style.width = pct + '%';
+        });
+
+        // CAPS logic
+        socket.on('caps_available', () => {
+            document.getElementById('caps-panel').style.display = 'flex';
+            document.getElementById('btn-caps').innerText = 'AUTHORIZE CAPS DEPLOYMENT 🆘';
+            document.getElementById('btn-caps').style.background = 'var(--danger)';
+            logEvent('WARNING: Altitude critical. CAPS deployment available.');
+        });
+
+        socket.on('caps_authorized_status', (status) => {
+            if (status) {
+                const btn = document.getElementById('btn-caps');
+                btn.innerText = 'CAPS AUTHORIZED ✅';
+                btn.style.background = 'var(--success)';
+                btn.onclick = null;
+                logEvent('CAPS Deployment Authorized. Waiting for Cabin (SimHub).', true);
+            }
+        });
+
+        function authorizeCaps() {
+            socket.emit('authorize_caps');
+        }
+
+        function toggleSabotage(type) {
+            if (activeSabotages.includes(type)) {
+                socket.emit('clear_sabotage', { type: type });
+                logEvent(`Cleared Sabotage: ${type}`);
+            } else {
+                socket.emit('trigger_sabotage', { type: type });
+                logEvent(`Triggered Sabotage: ${type}`, true);
+            }
+        }
+
+        function logEvent(msg, isWarning=false) {
+            const log = document.getElementById('scenario-log');
+            const time = new Date().toLocaleTimeString();
+            const color = isWarning ? 'var(--danger)' : 'var(--text-muted)';
+            log.innerHTML += `<span style="color:${color}">[${time}] ${msg}</span><br>`;
+            log.scrollTop = log.scrollHeight;
+        }
+    </script>
+</body>
+</html>

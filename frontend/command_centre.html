@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Command Centre | LUP Simulator</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        .container {
+            grid-template-columns: 250px 1fr 250px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>LUP <span>COMMAND CENTRE</span></h1>
+        <div class="status-indicator">
+            DATA LINK
+            <div id="connection-status" class="status-dot"></div>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Left Sidebar: Telemetry -->
+        <div class="panel">
+            <h2>Flight Data</h2>
+            <div class="data-grid" style="grid-template-columns: 1fr;">
+                <div class="data-card">
+                    <div class="data-label">SPEED (Kts)</div>
+                    <div id="tel-spd" class="data-value">0.0</div>
+                </div>
+                <div class="data-card">
+                    <div class="data-label">ALTITUDE (Ft)</div>
+                    <div id="tel-alt" class="data-value">0</div>
+                </div>
+                <div class="data-card">
+                    <div class="data-label">HEADING</div>
+                    <div id="tel-hdg" class="data-value">0.0</div>
+                </div>
+                <div class="data-card">
+                    <div class="data-label">FUEL (Kg)</div>
+                    <div id="tel-fuel" class="data-value">0.0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content: Map -->
+        <div class="main-content">
+            <div class="panel" style="flex-grow: 1; padding: 0; overflow: hidden; display: flex; flex-direction: column;">
+                <h2 style="padding: 1rem 1.5rem 0.5rem; margin: 0;">Tactical Map (LNM)</h2>
+                <div class="iframe-container" style="border: none; border-radius: 0; flex-grow: 1;">
+                    <iframe src="http://localhost:8965/"></iframe>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Sidebar: Weather & Status -->
+        <div class="panel">
+            <h2>Environment</h2>
+            <div class="data-grid" style="grid-template-columns: 1fr;">
+                <div class="data-card">
+                    <div class="data-label">WIND (Kts)</div>
+                    <div id="tel-wind" class="data-value">0 / 0°</div>
+                </div>
+                <div class="data-card">
+                    <div class="data-label">TEMP (°C)</div>
+                    <div id="tel-temp" class="data-value">0.0</div>
+                </div>
+                <div class="data-card">
+                    <div class="data-label">TURBULENCE</div>
+                    <div id="tel-turb" class="data-value">0.0</div>
+                </div>
+            </div>
+
+            <h2 style="margin-top: 1.5rem;">CCTV Feeds</h2>
+            <div class="data-card" style="height: 150px; display:flex; justify-content:center; align-items:center; text-align:center;">
+                <span id="cctv-status" style="color:var(--text-muted); font-family: 'JetBrains Mono';">CAM 1: ONLINE</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        const statusDot = document.getElementById('connection-status');
+
+        socket.on('connect', () => {
+            statusDot.classList.add('connected');
+        });
+
+        socket.on('disconnect', () => {
+            statusDot.classList.remove('connected');
+        });
+
+        let avionicsFailed = false;
+
+        // Sabotage updates
+        socket.on('sabotage_update', (sabotages) => {
+            // CCTV Sabotage
+            const cctvStatus = document.getElementById('cctv-status');
+            if (sabotages.includes('CCTV')) {
+                cctvStatus.innerHTML = '<span style="color:var(--danger)">CCTV OFFLINE - SIGNAL LOST</span>';
+            } else {
+                cctvStatus.innerHTML = '<span style="color:var(--success)">CAM 1: ONLINE</span>';
+            }
+
+            // COMMS Sabotage
+            const statusIndicator = document.querySelector('.status-indicator');
+            if (sabotages.includes('COMMS')) {
+                statusIndicator.innerHTML = 'DATA LINK LOST <div id="connection-status" class="status-dot"></div>';
+                statusIndicator.style.color = 'var(--danger)';
+            } else {
+                statusIndicator.innerHTML = 'DATA LINK <div id="connection-status" class="status-dot connected"></div>';
+                statusIndicator.style.color = 'inherit';
+            }
+
+            // AVIONICS Sabotage
+            avionicsFailed = sabotages.includes('AVIONICS');
+
+            // WINDSHEAR Sabotage
+            if (sabotages.includes('WINDSHEAR')) {
+                document.getElementById('tel-wind').parentElement.style.borderColor = 'var(--danger)';
+                document.getElementById('tel-turb').parentElement.style.borderColor = 'var(--danger)';
+                document.getElementById('tel-wind').parentElement.style.boxShadow = '0 0 15px var(--danger-glow)';
+                document.getElementById('tel-turb').parentElement.style.boxShadow = '0 0 15px var(--danger-glow)';
+            } else {
+                document.getElementById('tel-wind').parentElement.style.borderColor = 'rgba(255,255,255,0.05)';
+                document.getElementById('tel-turb').parentElement.style.borderColor = 'rgba(255,255,255,0.05)';
+                document.getElementById('tel-wind').parentElement.style.boxShadow = 'none';
+                document.getElementById('tel-turb').parentElement.style.boxShadow = 'none';
+            }
+        });
+
+        // Telemetry updates
+        socket.on('telemetry_update', (data) => {
+            if (avionicsFailed) {
+                document.getElementById('tel-spd').textContent = 'ERR';
+                document.getElementById('tel-alt').textContent = 'ERR';
+                document.getElementById('tel-hdg').textContent = 'ERR';
+                document.getElementById('tel-fuel').textContent = 'ERR';
+                document.getElementById('tel-wind').textContent = 'ERR / ERR°';
+                document.getElementById('tel-temp').textContent = 'ERR';
+                document.getElementById('tel-turb').textContent = 'ERR';
+                return;
+            }
+
+            if(data.SPD !== undefined) document.getElementById('tel-spd').textContent = data.SPD.toFixed(1);
+            if(data.ALT !== undefined) document.getElementById('tel-alt').textContent = data.ALT.toFixed(0);
+            if(data.HDG !== undefined) document.getElementById('tel-hdg').textContent = data.HDG.toFixed(1);
+            if(data.FUEL !== undefined) document.getElementById('tel-fuel').textContent = data.FUEL.toFixed(1);
+            
+            // Weather
+            if(data.WSPD !== undefined && data.WDIR !== undefined) {
+                document.getElementById('tel-wind').textContent = `${data.WSPD.toFixed(0)} / ${data.WDIR.toFixed(0)}°`;
+            }
+            if(data.TEMP !== undefined) document.getElementById('tel-temp').textContent = data.TEMP.toFixed(1);
+            if(data.TURB !== undefined) document.getElementById('tel-turb').textContent = data.TURB.toFixed(1);
+        });
+    </script>
+</body>
+</html>
